@@ -8,6 +8,10 @@ project(
 )
 set(CARGO_PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
+option(BUILD_TESTING "Use this to also build tests." ON)
+option(BUILD_EXAMPLES "Use this to also build the examples." ON)
+option(CARGO_CHECK "Use this to run the cargo check" ON)
+
 if(NOT PROJECT_VERSION_TWEAK)
 	set(CARGO_PROJECT_VERSION "${CARGO_PROJECT_VERSION}-dev")
 elseif(PROJECT_VERSION_TWEAK LESS 255)
@@ -70,9 +74,9 @@ add_custom_target(cargo ALL COMMAND cargo build ${CARGO_FLAGS} COMMENT "Running 
 # rustup target add arm-unknown-linux-gnueabi
 # rustup target add aarch64-unknown-linux-gnu
 # rustup target add x86_64-unknown-linux-gnu
-# 
+#
 # check which targets are already installed with
-# 
+#
 # rustup target list --installed
 #
 add_custom_target(crosscheck)
@@ -83,13 +87,15 @@ x86_64-unknown-linux-gnu
 arm-unknown-linux-gnueabi
 )
 
-foreach(target ${targets})
-	add_custom_target(cargo_check_${target} 
-		COMMAND cargo check --target ${target} ${CARGO_FLAGS} 
-		COMMENT "cargo check on ${target}" 
-		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-	add_dependencies(crosscheck cargo_check_${target})
-endforeach()
+if(CARGO_CHECK)
+	foreach(target ${targets})
+		add_custom_target(cargo_check_${target}
+			COMMAND cargo check --target ${target} ${CARGO_FLAGS}
+			COMMENT "cargo check on ${target}"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+		add_dependencies(crosscheck cargo_check_${target})
+	endforeach()
+endif()
 
 if(APPLE)
 	set(libzenohc "libzenohc.dylib")
@@ -118,55 +124,64 @@ set_property(TARGET zenohc PROPERTY IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/${lib
 target_include_directories(zenohc INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 if(APPLE OR UNIX OR WIN32)
-	file(GLOB examples_files "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.c")
-	add_custom_target(examples)
 
-	foreach(file ${examples_files})
-		get_filename_component(target ${file} NAME_WE)
-		add_executable(${target} EXCLUDE_FROM_ALL ${file})
-		add_dependencies(examples ${target})
-		add_dependencies(${target} zenohc_static)
-		set_property(TARGET ${target} PROPERTY C_STANDARD 11)
-		set_property(TARGET ${target} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/examples")
-		target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-		target_link_libraries(${target} PUBLIC "${CMAKE_BINARY_DIR}/${libzenohc_static}")
+	if(BUILD_EXAMPLES)
 
-		if(APPLE)
-			find_library(FFoundation Foundation)
-			find_library(FSecurity Security)
-			target_link_libraries(${target} PUBLIC ${FFoundation} ${FSecurity})
-		elseif(UNIX)
-			target_link_libraries(${target} PUBLIC rt pthread m dl)
-		elseif(WIN32)
-			target_link_libraries(${target} PUBLIC ws2_32 crypt32 secur32 bcrypt ncrypt userenv ntdll iphlpapi runtimeobject)
-		endif()
-	endforeach()
+		file(GLOB examples_files "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.c")
+		add_custom_target(examples)
 
-	enable_testing()	
-	file(GLOB tests_files "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.c")
-	add_custom_target(tests)
+		foreach(file ${examples_files})
+			get_filename_component(target ${file} NAME_WE)
+			add_executable(${target} EXCLUDE_FROM_ALL ${file})
+			add_dependencies(examples ${target})
+			add_dependencies(${target} zenohc_static)
+			set_property(TARGET ${target} PROPERTY C_STANDARD 11)
+			set_property(TARGET ${target} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/examples")
+			target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+			target_link_libraries(${target} PUBLIC "${CMAKE_BINARY_DIR}/${libzenohc_static}")
 
-	foreach(file ${tests_files})
-		get_filename_component(target ${file} NAME_WE)
-		add_executable(${target} EXCLUDE_FROM_ALL ${file})
-		add_dependencies(tests ${target})
-		add_dependencies(${target} zenohc_static)
-		set_property(TARGET ${target} PROPERTY C_STANDARD 11)
-		set_property(TARGET ${target} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
-		target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-		target_link_libraries(${target} PUBLIC "${CMAKE_BINARY_DIR}/${libzenohc_static}")
+			if(APPLE)
+				find_library(FFoundation Foundation)
+				find_library(FSecurity Security)
+				target_link_libraries(${target} PUBLIC ${FFoundation} ${FSecurity})
+			elseif(UNIX)
+				target_link_libraries(${target} PUBLIC rt pthread m dl)
+			elseif(WIN32)
+				target_link_libraries(${target} PUBLIC ws2_32 crypt32 secur32 bcrypt ncrypt userenv ntdll iphlpapi runtimeobject)
+			endif()
+		endforeach()
 
-		if(APPLE)
-			find_library(FFoundation Foundation)
-			find_library(FSecurity Security)
-			target_link_libraries(${target} PUBLIC ${FFoundation} ${FSecurity})
-		elseif(UNIX)
-			target_link_libraries(${target} PUBLIC rt pthread m dl)
-		elseif(WIN32)
-			target_link_libraries(${target} PUBLIC ws2_32 crypt32 secur32 bcrypt ncrypt userenv ntdll iphlpapi runtimeobject)
-		endif()
-		add_test(NAME "test_${file}" COMMAND ${target})
-	endforeach()
+	endif()
+
+	if(BUILD_TESTING)
+
+		enable_testing()
+		file(GLOB tests_files "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.c")
+		add_custom_target(tests)
+
+		foreach(file ${tests_files})
+			get_filename_component(target ${file} NAME_WE)
+			add_executable(${target} EXCLUDE_FROM_ALL ${file})
+			add_dependencies(tests ${target})
+			add_dependencies(${target} zenohc_static)
+			set_property(TARGET ${target} PROPERTY C_STANDARD 11)
+			set_property(TARGET ${target} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests")
+			target_include_directories(${target} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+			target_link_libraries(${target} PUBLIC "${CMAKE_BINARY_DIR}/${libzenohc_static}")
+
+			if(APPLE)
+				find_library(FFoundation Foundation)
+				find_library(FSecurity Security)
+				target_link_libraries(${target} PUBLIC ${FFoundation} ${FSecurity})
+			elseif(UNIX)
+				target_link_libraries(${target} PUBLIC rt pthread m dl)
+			elseif(WIN32)
+				target_link_libraries(${target} PUBLIC ws2_32 crypt32 secur32 bcrypt ncrypt userenv ntdll iphlpapi runtimeobject)
+			endif()
+			add_test(NAME "test_${file}" COMMAND ${target})
+		endforeach()
+	endif()
+
 else()
 	message(WARNING "You platform doesn't seem to support building the examples or tests.")
 endif()
